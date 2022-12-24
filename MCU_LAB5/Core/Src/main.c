@@ -18,11 +18,13 @@
   */
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
+#include <uart.h>
 #include "main.h"
-
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include "global.h"
+#include "command_parser_fsm.h"
+#include "ledBlinky.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -69,6 +71,24 @@ static void MX_USART2_UART_Init(void);
   * @brief  The application entry point.
   * @retval int
   */
+
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef* htim) {
+    timerRun();
+}
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef * huart){
+	if(huart->Instance == USART2){
+		update_Buffer(temp);
+		buffer_flag =1;
+		HAL_UART_Transmit(&huart2, &temp, 1, 50);
+		HAL_UART_Receive_IT(&huart2, &temp, 1);
+
+	}
+}
+void readSensor(void) {
+	char str[50];
+	ADC_value = HAL_ADC_GetValue(&hadc1);
+	HAL_UART_Transmit(&huart2, (void *)str, sprintf(str, "\r\n!ADC=%ld#", ADC_value), 1000);
+}
 int main(void)
 {
   /* USER CODE BEGIN 1 */
@@ -94,19 +114,35 @@ int main(void)
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   MX_ADC1_Init();
+
   MX_TIM2_Init();
+  HAL_ADC_Start(&hadc1);
   MX_USART2_UART_Init();
+  HAL_TIM_Base_Start_IT(&htim2);
+  HAL_UART_Receive_IT(&huart2, &temp, 1);
   /* USER CODE BEGIN 2 */
 
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
+
+  //uint8_t tmp;
+
   while (1)
   {
     /* USER CODE END WHILE */
+	  ledBlinky();
+	  if(buffer_flag == 1 || timer1_flag == 1) {
+		 if(buffer_flag == 1){
 
+			 buffer_flag = 0;
+		 }
+		 command_parser_fsm();
+	  }
+	  uart_communiation_fsm();
     /* USER CODE BEGIN 3 */
+
   }
   /* USER CODE END 3 */
 }
@@ -219,7 +255,7 @@ static void MX_TIM2_Init(void)
   htim2.Instance = TIM2;
   htim2.Init.Prescaler = 7999;
   htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim2.Init.Period = 10;
+  htim2.Init.Period = 9;
   htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
   if (HAL_TIM_Base_Init(&htim2) != HAL_OK)
